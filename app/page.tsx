@@ -1,13 +1,10 @@
 "use client";
 
-import { useRef } from "react";
-import { useChat } from "ai/react";
-import va from "@vercel/analytics";
+import { useRef, useState } from "react";
 import clsx from "clsx";
 import { VercelIcon, GithubIcon, LoadingCircle, SendIcon } from "./icons";
 import { Bot, User } from "lucide-react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import Typewriter from "typewriter-effect";
 import Textarea from "react-textarea-autosize";
 import { toast } from "sonner";
 
@@ -17,27 +14,68 @@ const examples = [
   "What is the top story on Hacker News right now?",
 ];
 
+interface Message {
+  id: number;
+  text: string;
+  role: string;
+}
+
 export default function Chat() {
   const formRef = useRef<HTMLFormElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  const { messages, input, setInput, handleSubmit, isLoading } = useChat({
-    onResponse: (response) => {
-      if (response.status === 429) {
-        toast.error("You have reached your request limit for the day.");
-        va.track("Rate limited");
-        return;
-      } else {
-        va.track("Chat initiated");
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [input, setInput] = useState<string>("");
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+
+  const apiUrl = "/api/chat";
+
+  const handleSubmit = async (e: any) => {
+    e?.preventDefault();
+    if (input !== "") {
+      setMessages([
+        ...messages,
+        { id: messages.length, text: input, role: "user" },
+      ]);
+      setIsLoading(true);
+      const prev = input;
+      setInput("");
+
+      try {
+        const response = await fetch(apiUrl, {
+          method: "POST",
+          body: JSON.stringify({ question: input }),
+        });
+
+        const data = await response.json();
+        if (response.status !== 200) {
+          return toast.error(
+            data || "An error occurred while sending the message.",
+          );
+        }
+        setMessages([
+          ...messages,
+          {
+            id: messages.length,
+            text: prev,
+            role: "user",
+          },
+          {
+            id: messages.length + 1,
+            text: data,
+            role: "assistant",
+          },
+        ]);
+      } catch (error) {
+        toast.error("An error occurred while sending the message.");
+        setInput(prev);
+      } finally {
+        setIsLoading(false);
       }
-    },
-    onError: (error) => {
-      va.track("Chat errored", {
-        input,
-        error: error.message,
-      });
-    },
-  });
+    } else {
+      return toast.error("Type something before submitting your message");
+    }
+  };
 
   const disabled = isLoading || input.length === 0;
 
@@ -75,24 +113,36 @@ export default function Chat() {
                   message.role === "assistant" ? "bg-green-500" : "bg-black",
                 )}
               >
-                {message.role === "user" ? (
+                {message.role !== "assistant" ? (
                   <User width={20} />
                 ) : (
                   <Bot width={20} />
                 )}
               </div>
-              <ReactMarkdown
-                className="prose mt-1 w-full break-words prose-p:leading-relaxed"
-                remarkPlugins={[remarkGfm]}
-                components={{
-                  // open links in new tab
-                  a: (props) => (
-                    <a {...props} target="_blank" rel="noopener noreferrer" />
-                  ),
-                }}
-              >
-                {message.content}
-              </ReactMarkdown>
+              {message.role === "assistant" ? (
+                <div id={`message-${i}`}>
+                  <Typewriter
+                    options={{
+                      loop: false,
+                      delay: 1,
+                    }}
+                    onInit={(typewriter) => {
+                      typewriter
+                        .typeString(message.text)
+                        .stop()
+                        .callFunction(() => {
+                          const el : any = document.querySelector(
+                            `#message-${i} .Typewriter__cursor`,
+                          );
+                          if (el) el.style.visibility = "hidden";
+                        })
+                        .start();
+                    }}
+                  />
+                </div>
+              ) : (
+                <div>{message.text}</div>
+              )}
             </div>
           </div>
         ))
@@ -181,6 +231,7 @@ export default function Chat() {
             }}
             spellCheck={false}
             className="w-full pr-10 focus:outline-none"
+            disabled={isLoading}
           />
           <button
             className={clsx(
