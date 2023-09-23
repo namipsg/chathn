@@ -28,6 +28,20 @@ export default function Chat() {
   const [input, setInput] = useState<string>("");
   const [isLoading, setIsLoading] = useState<boolean>(false);
 
+  function removeQuotesIfExist(inputString: string) {
+    let result = inputString;
+
+    if (inputString.startsWith('"')) {
+      result = result.slice(1);
+    }
+
+    if (inputString.endsWith('"')) {
+      result = result.slice(0, -1);
+    }
+
+    return result;
+  }
+
   const apiUrl = "/api/chat";
 
   const handleSubmit = async (e: any) => {
@@ -128,10 +142,10 @@ export default function Chat() {
                     }}
                     onInit={(typewriter) => {
                       typewriter
-                        .typeString(message.text)
+                        .typeString(removeQuotesIfExist(message.text))
                         .stop()
                         .callFunction(() => {
-                          const el : any = document.querySelector(
+                          const el: any = document.querySelector(
                             `#message-${i} .Typewriter__cursor`,
                           );
                           if (el) el.style.visibility = "hidden";
